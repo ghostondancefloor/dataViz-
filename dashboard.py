@@ -51,7 +51,7 @@ if section == "Visualisations Simples":
 
     # Keyword Trend by Month with Month Filter
     st.subheader("1. Fréquence des mots-clés par mois")
-    selected_keyword = st.sidebar.text_input("Entrer un mot-clé pour filtrer les articles:", "")
+    selected_keyword = st.text_input("Entrer un mot-clé pour filtrer les articles:", "")
 
     if selected_keyword:
         keyword_filtered_data = data[data['kws'].str.contains(selected_keyword, case=False, na=False)]
