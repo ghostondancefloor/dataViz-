@@ -7,6 +7,7 @@ from itertools import combinations
 from collections import Counter
 from sklearn.preprocessing import LabelEncoder
 from scipy.sparse import coo_matrix
+import plotly.graph_objects as go
 
 # Page Configuration
 st.set_page_config(
@@ -18,6 +19,15 @@ st.set_page_config(
 
 def load_data(file_path):
     return pd.read_csv(file_path)
+
+def load_yearly_data():
+    file1_path = 'metadata\year_data_2022.csv'
+    file2_path = 'metadata\year_data_2023.csv'
+    data1 = pd.read_csv(file1_path)
+    data2 = pd.read_csv(file2_path)
+    return pd.concat([data1, data2], ignore_index=True)
+
+combined_data = load_yearly_data()
 
 DATA_FILE = "output_data/data.csv"
 data = load_data(DATA_FILE)
@@ -36,25 +46,90 @@ if section == "Visualisations Simples":
     selected_year = st.sidebar.multiselect("Année", sorted(data["year"].unique()), default=data["year"].unique())
     selected_month = st.sidebar.multiselect("Mois", sorted(data["month"].unique()), default=data["month"].unique())
 
-    # Filter data based on user selection
-    filtered_data = data[
-        (data["year"].isin(selected_year)) &
-        (data["month"].isin(selected_month))
-    ]
+    # Filter data
+    filtered_data = data[(data["year"].isin(selected_year)) & (data["month"].isin(selected_month))]
 
-    # Temporal Overview
-    st.subheader("1. Nombre d'articles publiés par jour")
-    daily_counts = filtered_data.groupby(["year", "month", "day"]).size().reset_index(name="count")
-    fig = px.bar(daily_counts, x="day", y="count", color="month", title="Nombre d'articles publiés par jour")
-    st.plotly_chart(fig)
+    # Keyword Trend by Month with Month Filter
+    st.subheader("1. Fréquence des mots-clés par mois")
+    selected_keyword = st.sidebar.text_input("Entrer un mot-clé pour filtrer les articles:", "")
 
-    # Top Keywords
-    st.subheader("2. Mots-clés les plus fréquents")
-    if "kws" in filtered_data.columns:
-        keyword_freq = filtered_data["kws"].str.split(",").explode().value_counts().reset_index()
-        keyword_freq.columns = ["Mot-clé", "Occurrences"]
-        fig = px.bar(keyword_freq.head(10), x="Occurrences", y="Mot-clé", orientation="h", title="Top 10 des mots-clés")
-        st.plotly_chart(fig)
+    if selected_keyword:
+        keyword_filtered_data = data[data['kws'].str.contains(selected_keyword, case=False, na=False)]
+
+        if keyword_filtered_data.empty:
+            st.warning(f"Aucun article trouvé mentionnant le mot-clé '{selected_keyword}'.")
+        else:
+        # Create a datetime column for grouping
+            keyword_filtered_data['publish_date'] = pd.to_datetime(
+                keyword_filtered_data[['year', 'month', 'day']],
+                errors='coerce'
+            )
+            keyword_filtered_data = keyword_filtered_data.dropna(subset=['publish_date'])
+
+        # Apply the month filter
+            keyword_filtered_data = keyword_filtered_data[keyword_filtered_data['month'].isin(selected_month)]
+
+        # Check if data is empty after applying month filter
+            if keyword_filtered_data.empty:
+                st.warning("Aucun article trouvé pour les mois sélectionnés avec le mot-clé donné.")
+            else:
+            # Group data by month and count the number of articles
+                keyword_filtered_data['month'] = keyword_filtered_data['publish_date'].dt.to_period('M').astype(str)
+                monthly_counts = keyword_filtered_data.groupby('month').size().reset_index(name='article_count')
+
+            # Create a histogram using Plotly Express
+                fig = px.bar(
+                    monthly_counts,
+                    x='month',
+                    y='article_count',
+                    labels={'month': 'Mois', 'article_count': 'Nombre d articles'},
+                    title=f"Articles qui mentionnent '{selected_keyword}' par mois"
+                )
+                fig.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig)
+    else:
+        st.info("Entrer un mot-clé pour générer l'histogramme.")
+
+    # Yearly and Category-Based Word Analysis
+    st.subheader("2. Analyse basée sur les catégories ou les années")
+
+# Category-specific histogram section
+    selected_category = st.text_input("Saisir la catégorie", "")
+
+# Check if 'category' column exists
+    if 'category' in combined_data.columns:
+    # Apply category filter only for the histogram
+        if selected_category:
+            histogram_data = combined_data[combined_data['category'].str.contains(selected_category, case=False, na=False)]
+        else:
+            histogram_data = combined_data
+
+        if histogram_data.empty:
+            st.warning("Aucune donnée disponible pour la catégorie sélectionnée.")
+        else:
+        # Check for the 'kws' column
+            if 'key' in histogram_data.columns:
+                aggregated_data = histogram_data.groupby('key', as_index=False)['value'].sum()
+
+            # Get the top 10 most common words
+                top_words = aggregated_data.nlargest(10, 'value')
+
+            # Create a bar chart using Plotly Express
+                fig = px.bar(
+                    top_words,
+                    x='key',
+                    y='value',
+                    labels={'kws': 'Mots', 'value': 'Fréquence'},
+                    title='Top 10 Mots'
+                )
+                fig.update_layout(xaxis_tickangle=-45)
+
+            # Display the bar chart
+                st.plotly_chart(fig)
+            else:
+                st.warning("The column 'key' does not exist in the dataset. Please check your data structure.")
+    else:
+        st.warning("The column 'category' does not exist in the dataset. Please check your data structure.")
 
 # Section 2: Geographic Analysis
 elif section == "Analyse Géographique":
@@ -142,41 +217,96 @@ elif section == "Analyse Géographique":
 
 
 
-# Section 3: Keyword Correlation
-# elif section == "Corrélation des Mots-Clés":
-#     st.title("Corrélation des Mots-Clés")
+# Section 3: 
+# Section 3: Keyword Correlation Network
+elif section == "Corrélation des Mots-Clés":
+    st.title("Relation entre les différents organisations")
 
-#     # Preprocess Keywords
-#     @st.cache
-#     def preprocess_keywords(df):
-#         df["kws_list"] = df["kws"].str.split(",")
-#         return df
+    # Load the keyword relationships
+    relationships_file = 'output_data/org_relationships.csv'  # Replace with your file path
+    keyword_relationships = pd.read_csv(relationships_file)
 
-#     data = preprocess_keywords(data)
 
-#     # Build Keyword Network
-#     def build_network_graph(df):
-#         G = nx.Graph()
-#         for keywords in df["kws_list"].dropna():
-#             pairs = combinations(sorted(set(keywords)), 2)
-#             for k1, k2 in pairs:
-#                 if G.has_edge(k1, k2):
-#                     G[k1][k2]["weight"] += 1
-#                 else:
-#                     G.add_edge(k1, k2, weight=1)
-#         return G
+    st.sidebar.header("Filtres")
+    min_count = st.sidebar.slider("Minimum Count", min_value=10, max_value=100, value=1)
+    filtered_relationships = keyword_relationships[keyword_relationships['count'] > min_count]
 
-#     G = build_network_graph(data)
+    # Create a graph from the filtered relationships
+    G = nx.Graph()
+    for _, row in filtered_relationships.iterrows():
+        G.add_edge(row['keyword'], row['related_keyword'], weight=row['count'])
 
-#     # Display Network Graph
-#     st.subheader("Graphique des Corrélations")
-#     fig, ax = plt.subplots(figsize=(12, 12))
-#     pos = nx.spring_layout(G, k=0.3)
-#     nx.draw_networkx_nodes(G, pos, node_size=700, node_color="lightblue")
-#     nx.draw_networkx_edges(G, pos, width=[d["weight"] for (_, _, d) in G.edges(data=True)])
-#     nx.draw_networkx_labels(G, pos, font_size=10, font_color="black")
-#     plt.title("Keyword Co-occurrence Network")
-#     st.pyplot(fig)
+    # Create the graph visualization
+    def plot_network(G):
+        # Generate layout
+        pos = nx.spring_layout(G, k=0.5)  # Force-directed layout
+
+        # Prepare edge data
+        edge_x = []
+        edge_y = []
+        for edge in G.edges(data=True):
+            x0, y0 = pos[edge[0]]
+            x1, y1 = pos[edge[1]]
+            edge_x.append(x0)
+            edge_x.append(x1)
+            edge_x.append(None)
+            edge_y.append(y0)
+            edge_y.append(y1)
+            edge_y.append(None)
+
+        edge_trace = go.Scatter(
+            x=edge_x,
+            y=edge_y,
+            line=dict(width=1, color="#888"),
+            hoverinfo="none",
+            mode="lines"
+        )
+
+        # Prepare node data
+        node_x = []
+        node_y = []
+        node_size = []
+        node_labels = []
+        for node in G.nodes():
+            x, y = pos[node]
+            node_x.append(x)
+            node_y.append(y)
+            node_size.append(sum([G[node][neighbor]['weight'] for neighbor in G.neighbors(node)]) / 10)
+            node_labels.append(f"{node}")
+
+        node_trace = go.Scatter(
+            x=node_x,
+            y=node_y,
+            mode="markers+text",
+            hoverinfo="text",
+            text=node_labels,
+            marker=dict(
+                size=node_size,
+                color="lightblue",
+                line=dict(width=1, color="darkblue"),
+            )
+        )
+
+        fig = go.Figure(data=[edge_trace, node_trace],
+                        layout=go.Layout(
+                            title="Keyword Correlation Network",
+                            titlefont_size=16,
+                            showlegend=False,
+                            hovermode="closest",
+                            margin=dict(b=0, l=0, r=0, t=40),
+                            xaxis=dict(showgrid=False, zeroline=False),
+                            yaxis=dict(showgrid=False, zeroline=False),
+                        ))
+        return fig
+
+    # Display the graph
+    st.markdown("### Réseau de Corrélations")
+    if not filtered_relationships.empty:
+        fig = plot_network(G)
+        st.plotly_chart(fig)
+    else:
+        st.warning("Aucune relation à afficher pour le seuil de count sélectionné.")
+
 
 # Footer
 st.sidebar.markdown("Ikram IDDOUCH - Khadija Zaroil")
