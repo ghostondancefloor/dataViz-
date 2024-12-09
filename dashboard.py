@@ -16,8 +16,6 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Load Main Data
-@st.cache
 def load_data(file_path):
     return pd.read_csv(file_path)
 
@@ -62,10 +60,9 @@ if section == "Visualisations Simples":
 elif section == "Analyse Géographique":
     st.title("Analyse Géographique")
 
-    @st.cache
     def load_geocoded_data():
-        df_2022 = pd.read_csv("geocoded_locations_2022.csv")
-        df_2023 = pd.read_csv("geocoded_locations_2023.csv")
+        df_2022 = pd.read_csv("metadata/geocoded_locations_2022.csv")
+        df_2023 = pd.read_csv("metadata/geocoded_locations_2023.csv")
         df_2022['dataset_year'] = 2022
         df_2023['dataset_year'] = 2023
         return pd.concat([df_2022, df_2023], ignore_index=True)
@@ -75,11 +72,9 @@ elif section == "Analyse Géographique":
     # Sidebar options
     st.sidebar.title("Filtres Géographiques")
     dataset_years = sorted(geocoded_data['dataset_year'].unique())
-    selected_dataset_year = st.sidebar.selectbox("Select Dataset Year", dataset_years)
+    selected_dataset_year = st.sidebar.selectbox("Select Year", dataset_years)
     filtered_geocoded = geocoded_data[geocoded_data['dataset_year'] == selected_dataset_year]
     years = sorted(filtered_geocoded['year'].unique())
-    selected_year_geo = st.sidebar.selectbox("Select Year for Map", years)
-    filtered_geocoded = filtered_geocoded[filtered_geocoded['year'] == selected_year_geo]
     color_themes = ['Viridis', 'Cividis', 'Inferno', 'Plasma', 'Magma', 'Turbo']
     selected_color_theme = st.sidebar.selectbox("Select Color Theme", color_themes)
 
@@ -118,16 +113,33 @@ elif section == "Analyse Géographique":
         )
         return fig
 
-    # Display the map and summary
-    col1, col2 = st.columns([2, 1])
+        # Display the map in the middle
+    st.markdown(f"#### Carte des Pays les Plus Cités ({selected_dataset_year})")
+    choropleth = make_choropleth(country_summary, selected_color_theme)
+    st.plotly_chart(choropleth, use_container_width=True)
+
+    # Display table and pie chart side by side
+    st.markdown("### Top 10 des Pays les Plus Cités")
+    col1, col2 = st.columns(2)
+    
     with col1:
-        st.markdown(f"#### Carte Choropleth pour {selected_year_geo} ({selected_dataset_year})")
-        choropleth = make_choropleth(country_summary, selected_color_theme)
-        st.plotly_chart(choropleth, use_container_width=True)
+        st.markdown("#### Tableau des Pays")
+        top_countries = country_summary.nlargest(10, 'total_value')  # Get top 10 countries by total_value
+        top_countries = top_countries.rename(columns={'country': 'Pays', 'total_value': 'Nombre de fois cité'})  # Rename columns for display
+        st.dataframe(top_countries[['Pays', 'Nombre de fois cité']], use_container_width=True, hide_index=True)
 
     with col2:
-        st.markdown("#### Résumé des Pays")
-        st.dataframe(country_summary, use_container_width=True, hide_index=True)
+        st.markdown("#### Répartition des Pays les Plus Cités")
+        pie_chart = px.pie(
+            top_countries,
+            names='Pays',
+            values='Nombre de fois cité',
+            hole=0.4  # To create a donut chart style
+        )
+        st.plotly_chart(pie_chart, use_container_width=True)
+
+
+
 
 
 # Section 3: Keyword Correlation
@@ -167,5 +179,5 @@ elif section == "Analyse Géographique":
 #     st.pyplot(fig)
 
 # Footer
-st.sidebar.markdown("---")
+st.sidebar.markdown("Ikram IDDOUCH - Khadija Zaroil")
 st.sidebar.markdown("**Dashboard créé avec Streamlit**")
