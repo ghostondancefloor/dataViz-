@@ -38,7 +38,6 @@ section = st.sidebar.radio(
     "Choisissez une section :",
     ["Visualisations Simples", "Analyse Géographique", "Corrélation des Mots-Clés"]
 )
-
 # Section 1: Simple Visualizations
 if section == "Visualisations Simples":
     st.title("Visualisations Simples")
@@ -46,7 +45,7 @@ if section == "Visualisations Simples":
     selected_year = st.sidebar.multiselect("Année", sorted(data["year"].unique()), default=data["year"].unique())
     selected_month = st.sidebar.multiselect("Mois", sorted(data["month"].unique()), default=data["month"].unique())
 
-    # Filter data
+    # Filter data based on year and month
     filtered_data = data[(data["year"].isin(selected_year)) & (data["month"].isin(selected_month))]
 
     # Keyword Trend by Month with Month Filter
@@ -54,36 +53,34 @@ if section == "Visualisations Simples":
     selected_keyword = st.text_input("Entrer un mot-clé pour filtrer les articles:", "")
 
     if selected_keyword:
-        keyword_filtered_data = data[data['kws'].str.contains(selected_keyword, case=False, na=False)]
+        keyword_filtered_data = filtered_data[filtered_data['kws'].str.contains(selected_keyword, case=False, na=False)]
 
         if keyword_filtered_data.empty:
             st.warning(f"Aucun article trouvé mentionnant le mot-clé '{selected_keyword}'.")
         else:
-        # Create a datetime column for grouping
+            # Create a datetime column for grouping
             keyword_filtered_data['publish_date'] = pd.to_datetime(
                 keyword_filtered_data[['year', 'month', 'day']],
                 errors='coerce'
             )
             keyword_filtered_data = keyword_filtered_data.dropna(subset=['publish_date'])
 
-        # Apply the month filter
-            keyword_filtered_data = keyword_filtered_data[keyword_filtered_data['month'].isin(selected_month)]
-
-        # Check if data is empty after applying month filter
+            # Apply the month filter (already applied in filtered_data)
             if keyword_filtered_data.empty:
                 st.warning("Aucun article trouvé pour les mois sélectionnés avec le mot-clé donné.")
             else:
-            # Group data by month and count the number of articles
+                # Group data by month and count the number of articles
                 keyword_filtered_data['month'] = keyword_filtered_data['publish_date'].dt.to_period('M').astype(str)
                 monthly_counts = keyword_filtered_data.groupby('month').size().reset_index(name='article_count')
 
-            # Create a histogram using Plotly Express
+                # Create a histogram using Plotly Express
                 fig = px.bar(
                     monthly_counts,
                     x='month',
                     y='article_count',
                     labels={'month': 'Mois', 'article_count': 'Nombre d articles'},
-                    title=f"Articles qui mentionnent '{selected_keyword}' par mois"
+                    title=f"Articles qui mentionnent '{selected_keyword}' par mois",
+                    color_discrete_sequence=['#FF4B4B'] 
                 )
                 fig.update_layout(xaxis_tickangle=-45)
                 st.plotly_chart(fig)
@@ -92,45 +89,47 @@ if section == "Visualisations Simples":
 
     # Yearly and Category-Based Word Analysis
     st.subheader("2. Analyse basée sur les catégories ou les années")
-
-# Category-specific histogram section
     selected_category = st.text_input("Saisir la catégorie", "")
 
-# Check if 'category' column exists
+    filtered_data2 = combined_data[(combined_data["year"].isin(selected_year))]
+
+
+    # Check if 'category' column exists
     if 'category' in combined_data.columns:
-    # Apply category filter only for the histogram
+        # Filter data based on category
         if selected_category:
-            histogram_data = combined_data[combined_data['category'].str.contains(selected_category, case=False, na=False)]
+            histogram_data = filtered_data2[filtered_data2['category'].str.contains(selected_category, case=False, na=False)]
         else:
-            histogram_data = combined_data
+            histogram_data = filtered_data2
 
         if histogram_data.empty:
             st.warning("Aucune donnée disponible pour la catégorie sélectionnée.")
         else:
-        # Check for the 'kws' column
+            # Check for the 'key' column
             if 'key' in histogram_data.columns:
                 aggregated_data = histogram_data.groupby('key', as_index=False)['value'].sum()
 
-            # Get the top 10 most common words
+                # Get the top 10 most common words
                 top_words = aggregated_data.nlargest(10, 'value')
 
-            # Create a bar chart using Plotly Express
+                # Create a bar chart using Plotly Express
                 fig = px.bar(
                     top_words,
                     x='key',
                     y='value',
-                    labels={'kws': 'Mots', 'value': 'Fréquence'},
-                    title='Top 10 Mots'
+                    labels={'key': 'Mots', 'value': 'Fréquence'},
+                    title='Top 10 Mots',
+                    color_discrete_sequence=['#FF4B4B'] 
                 )
                 fig.update_layout(xaxis_tickangle=-45)
 
-            # Display the bar chart
+                # Display the bar chart
                 st.plotly_chart(fig)
             else:
                 st.warning("The column 'key' does not exist in the dataset. Please check your data structure.")
     else:
         st.warning("The column 'category' does not exist in the dataset. Please check your data structure.")
-
+        
 # Section 2: Geographic Analysis
 elif section == "Analyse Géographique":
     st.title("Analyse Géographique")
